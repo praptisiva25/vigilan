@@ -25,6 +25,12 @@ export default function VideoConfigPage() {
   const [allowedObjects, setAllowedObjects] = useState("")
   const [blockedObjects, setBlockedObjects] = useState("")
 
+  // Monitoring state
+  const [jobId, setJobId] = useState<number | null>(null)
+  const [jobStatus, setJobStatus] = useState<string | null>(null)
+  const [jobProgress, setJobProgress] = useState<number>(0)
+  const [polling, setPolling] = useState(false)
+
   useEffect(() => {
     loadVideo()
     loadZones()
@@ -84,7 +90,6 @@ export default function VideoConfigPage() {
       }),
     })
 
-    // Reset state
     setPoints([])
     setZoneName("")
     setAllowedObjects("")
@@ -100,63 +105,97 @@ export default function VideoConfigPage() {
     })
     loadZones()
   }
-  
-  const draw = () => {
-  const canvas = canvasRef.current
-  if (!canvas) return
 
-  const ctx = canvas.getContext("2d")!
-  const rect = canvas.getBoundingClientRect()
+  // Monitoring
+  const startMonitoring = async (mode: "LIVE" | "FAST") => {
+    const res = await fetch(
+      `${API}/api/monitoring/start/${id}?mode=${mode}`,
+      { method: "POST" }
+    )
 
-  canvas.width = rect.width
-  canvas.height = rect.height
+    const data = await res.json()
 
-  ctx.clearRect(0, 0, canvas.width, canvas.height)
-
-  const drawPolygon = (polygon: Point[], color: string) => {
-    if (!Array.isArray(polygon) || polygon.length === 0) return
-
-    ctx.beginPath()
-
-    polygon.forEach((p, i) => {
-      const px = p.x * canvas.width
-      const py = p.y * canvas.height
-      if (i === 0) ctx.moveTo(px, py)
-      else ctx.lineTo(px, py)
-    })
-
-    ctx.closePath()
-    ctx.fillStyle = color
-    ctx.fill()
-    ctx.strokeStyle = "black"
-    ctx.stroke()
+    setJobId(data.id)
+    setJobStatus(data.status)
+    setJobProgress(data.progress)
+    setPolling(true)
   }
 
-  zones.forEach((zone) => {
-    let polygon: any
+  useEffect(() => {
+    if (!polling || !jobId) return
 
-    try {
-      polygon = JSON.parse(zone.polygonCoordinates)
-    } catch {
-      return
+    const interval = setInterval(async () => {
+      const res = await fetch(`${API}/api/monitoring/status/${jobId}`)
+      const data = await res.json()
+
+      setJobStatus(data.status)
+      setJobProgress(data.progress)
+
+      if (data.status === "COMPLETED") {
+        setPolling(false)
+        clearInterval(interval)
+      }
+    }, 2000)
+
+    return () => clearInterval(interval)
+  }, [polling, jobId])
+
+  const draw = () => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+
+    const ctx = canvas.getContext("2d")!
+    const rect = canvas.getBoundingClientRect()
+
+    canvas.width = rect.width
+    canvas.height = rect.height
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+    const drawPolygon = (polygon: Point[], color: string) => {
+      if (!Array.isArray(polygon) || polygon.length === 0) return
+
+      ctx.beginPath()
+
+      polygon.forEach((p, i) => {
+        const px = p.x * canvas.width
+        const py = p.y * canvas.height
+        if (i === 0) ctx.moveTo(px, py)
+        else ctx.lineTo(px, py)
+      })
+
+      ctx.closePath()
+      ctx.fillStyle = color
+      ctx.fill()
+      ctx.strokeStyle = "black"
+      ctx.stroke()
     }
 
-    if (!Array.isArray(polygon)) return
+    zones.forEach((zone) => {
+      let polygon: any
 
-    const color =
-      zone.severity === "HIGH"
-        ? "rgba(255,0,0,0.4)"
-        : zone.severity === "MEDIUM"
-        ? "rgba(255,165,0,0.4)"
-        : "rgba(0,255,0,0.4)"
+      try {
+        polygon = JSON.parse(zone.polygonCoordinates)
+      } catch {
+        return
+      }
 
-    drawPolygon(polygon, color)
-  })
+      if (!Array.isArray(polygon)) return
 
-  if (points.length > 0) {
-    drawPolygon(points, "rgba(0,0,255,0.3)")
+      const color =
+        zone.severity === "HIGH"
+          ? "rgba(255,0,0,0.4)"
+          : zone.severity === "MEDIUM"
+          ? "rgba(255,165,0,0.4)"
+          : "rgba(0,255,0,0.4)"
+
+      drawPolygon(polygon, color)
+    })
+
+    if (points.length > 0) {
+      drawPolygon(points, "rgba(0,0,255,0.3)")
+    }
   }
-}
 
   useEffect(() => {
     draw()
@@ -185,9 +224,45 @@ export default function VideoConfigPage() {
         />
       </div>
 
+      {/* Monitoring Section */}
+      <div className="mt-6 bg-white p-4 rounded shadow max-w-4xl">
+        <div className="flex gap-4 mb-4">
+          <button
+            onClick={() => startMonitoring("LIVE")}
+            className="bg-blue-600 text-white px-4 py-2 rounded"
+          >
+            Start LIVE Monitoring
+          </button>
+
+          <button
+            onClick={() => startMonitoring("FAST")}
+            className="bg-purple-600 text-white px-4 py-2 rounded"
+          >
+            Start FAST Monitoring
+          </button>
+        </div>
+
+        {jobStatus && (
+          <div>
+            <p className="mb-2">
+              Status: <span className="font-semibold">{jobStatus}</span>
+            </p>
+
+            <div className="w-full bg-gray-200 rounded h-4">
+              <div
+                className="bg-green-600 h-4 rounded transition-all"
+                style={{ width: `${jobProgress}%` }}
+              />
+            </div>
+
+            <p className="mt-1 text-sm">{jobProgress}%</p>
+          </div>
+        )}
+      </div>
+
+      {/* Zone Creation */}
       <div className="mt-6 bg-white p-4 rounded shadow max-w-4xl">
         <div className="flex gap-4 mb-4 flex-wrap">
-
           <input
             type="text"
             placeholder="Zone name"
@@ -238,6 +313,7 @@ export default function VideoConfigPage() {
         </button>
       </div>
 
+      {/* Existing Zones */}
       <div className="mt-6 max-w-4xl">
         <h2 className="font-semibold mb-3">Existing Zones</h2>
 
