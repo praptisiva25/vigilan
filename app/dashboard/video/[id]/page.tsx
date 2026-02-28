@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { supabase } from "@/lib/supabaseClient"
+import { supabase } from "../../../../lib/supabaseClient"
 
 import VideoPlayer from "./components/VideoPlayer"
 import ZoneCanvas from "./components/ZoneCanvas"
@@ -25,8 +25,11 @@ export default function VideoPage() {
   const [jobId, setJobId] = useState<number | null>(null)
   const [status, setStatus] = useState<string | null>(null)
   const [progress, setProgress] = useState<number>(0)
-  const [points, setPoints] = useState<{ x: number; y: number }[]>([])
 
+  const [points, setPoints] = useState<{ x: number; y: number }[]>([])
+  const [drawingMode, setDrawingMode] = useState(false)
+
+  // ---------------- AUTH ----------------
   const getToken = async () => {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) {
@@ -58,6 +61,7 @@ export default function VideoPage() {
     return res.json()
   }
 
+  // ---------------- LOAD DATA ----------------
   const loadVideo = async () => {
     const data = await authFetch("/api/videos")
     if (!data) return
@@ -100,59 +104,83 @@ export default function VideoPage() {
     return () => clearInterval(interval)
   }, [jobId])
 
+  // ---------------- START MONITORING ----------------
   const startMonitoring = async () => {
-  if (selectedZones.length === 0) {
-    alert("Select at least one zone")
-    return
+    if (selectedZones.length === 0) {
+      alert("Select at least one zone")
+      return
+    }
+
+    const data = await authFetch(`/api/monitoring/start/${id}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(selectedZones),
+    })
+
+    if (!data) return
+
+    setJobId(data.jobId)
+    setStatus(data.status)
+    setProgress(data.progress)
   }
-
-  const data = await authFetch(`/api/monitoring/start/${id}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(selectedZones),
-  })
-
-  if (!data) return
-
-  setJobId(data.jobId)
-  setStatus(data.status)
-  setProgress(data.progress)
-}
 
   if (!video) return <p className="p-8">Loading...</p>
 
   return (
     <div className="p-8 space-y-6">
+
       <h1 className="text-2xl font-bold">
         Configure Zones — {video.name}
       </h1>
 
+      {/* Drawing Toggle */}
+      <button
+        onClick={() => setDrawingMode(!drawingMode)}
+        className="bg-blue-600 text-white px-4 py-2 rounded"
+      >
+        {drawingMode ? "Stop Drawing" : "Draw Zone"}
+      </button>
+
+      {/* Video + Canvas */}
       <div className="relative w-full max-w-4xl aspect-video">
         <VideoPlayer src={video.filePath} />
-        <ZoneCanvas zones={zones} points={points} setPoints={setPoints} />
+        <ZoneCanvas
+          zones={zones}
+          points={points}
+          setPoints={setPoints}
+          editable={drawingMode}
+        />
       </div>
 
+      {/* Zone Creation Form */}
       <ZoneForm
         videoId={Number(id)}
         points={points}
         clearPoints={() => setPoints([])}
-        onCreated={loadZones}
+        onCreated={() => {
+          loadZones()
+          setDrawingMode(false)
+        }}
       />
 
+      {/* Zone Selection List */}
       <ZoneList
-  zones={zones}
-  selectedZones={selectedZones}
-  setSelectedZones={setSelectedZones}
-  onDelete={loadZones}
-/>
+        zones={zones}
+        selectedZones={selectedZones}
+        setSelectedZones={setSelectedZones}
+        onDelete={loadZones}
+      />
 
+      {/* Monitoring Panel */}
       <MonitoringPanel
         onStart={startMonitoring}
         status={status}
         progress={progress}
       />
 
+      {/* Intrusions */}
       <IntrusionList intrusions={intrusions} />
+
     </div>
   )
 }

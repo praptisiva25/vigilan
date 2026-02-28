@@ -10,15 +10,21 @@ interface Point {
 export default function ZoneCanvas({
   zones,
   points,
-  setPoints
+  setPoints,
+  editable = false,
+  hoveredZoneId = null,
 }: {
   zones: any[]
   points: Point[]
   setPoints: (p: Point[]) => void
+  editable?: boolean
+  hoveredZoneId?: number | null
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   const handleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!editable) return
+
     const canvas = canvasRef.current!
     const rect = canvas.getBoundingClientRect()
 
@@ -63,24 +69,39 @@ export default function ZoneCanvas({
 
     ctx.clearRect(0, 0, canvas.width, canvas.height)
 
-    // draw existing zones
     zones.forEach((zone) => {
-      try {
-        const polygon = JSON.parse(zone.polygonCoordinates)
+  try {
+    const polygon = JSON.parse(zone.polygonCoordinates)
 
-        const color =
-          zone.severity === "HIGH"
-            ? "rgba(255,0,0,0.4)"
-            : zone.severity === "MEDIUM"
-            ? "rgba(255,165,0,0.4)"
-            : "rgba(0,255,0,0.4)"
+    const isHovered = zone.id === hoveredZoneId
 
-        drawPolygon(ctx, polygon, canvas, color)
-      } catch {}
-    })
+    let color =
+      zone.severity === "HIGH"
+        ? "rgba(255,0,0,0.4)"
+        : zone.severity === "MEDIUM"
+        ? "rgba(255,165,0,0.4)"
+        : "rgba(0,255,0,0.4)"
 
-    // draw current drawing (blue)
-    drawPolygon(ctx, points, canvas, "rgba(0,0,255,0.3)")
+    if (isHovered) {
+      color =
+        zone.severity === "HIGH"
+          ? "rgba(255,0,0,0.7)"
+          : zone.severity === "MEDIUM"
+          ? "rgba(255,165,0,0.7)"
+          : "rgba(0,255,0,0.7)"
+
+      ctx.lineWidth = 4
+    } else {
+      ctx.lineWidth = 1
+    }
+
+    drawPolygon(ctx, polygon, canvas, color)
+  } catch {}
+})
+
+    if (editable) {
+      drawPolygon(ctx, points, canvas, "rgba(0,0,255,0.3)")
+    }
   }
 
   useEffect(() => {
@@ -88,10 +109,14 @@ export default function ZoneCanvas({
   }, [zones, points])
 
   return (
-  <canvas
-    ref={canvasRef}
-    onClick={handleClick}
-    className="absolute inset-0 w-full h-full cursor-crosshair"
-  />
-)
+    <canvas
+      ref={canvasRef}
+      onClick={editable ? handleClick : undefined}
+      className={`absolute inset-0 w-full h-full ${
+        editable
+          ? "cursor-crosshair pointer-events-auto"
+          : "pointer-events-none"
+      }`}
+    />
+  )
 }
