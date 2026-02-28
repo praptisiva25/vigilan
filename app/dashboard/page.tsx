@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import dynamic from "next/dynamic"
 import { useRouter } from "next/navigation"
+import { supabase } from "../../lib/supabaseClient"
 
 const CameraLocationPicker = dynamic(
   () => import("../../components/CameraLocationPicker"),
@@ -21,9 +22,39 @@ export default function Dashboard() {
   const [videos, setVideos] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
 
+  // Helper: get JWT
+  const getToken = async () => {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) {
+      router.push("/")
+      return null
+    }
+    return session.access_token
+  }
+
+  // Sync user in backend (important for Google login redirect)
+  const syncUser = async () => {
+    const token = await getToken()
+    if (!token) return
+
+    await fetch(`${API}/api/users/me`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    })
+  }
+
   const fetchVideos = async () => {
+    const token = await getToken()
+    if (!token) return
+
     try {
-      const res = await fetch(`${API}/api/videos`)
+      const res = await fetch(`${API}/api/videos`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      })
       const data = await res.json()
       setVideos(Array.isArray(data) ? data : [])
     } catch {
@@ -32,7 +63,11 @@ export default function Dashboard() {
   }
 
   useEffect(() => {
-    fetchVideos()
+    const init = async () => {
+      await syncUser()
+      await fetchVideos()
+    }
+    init()
   }, [])
 
   const handleUpload = async () => {
@@ -46,6 +81,9 @@ export default function Dashboard() {
       return
     }
 
+    const token = await getToken()
+    if (!token) return
+
     const formData = new FormData()
     formData.append("file", file)
     formData.append("cameraId", cameraId)
@@ -57,6 +95,9 @@ export default function Dashboard() {
     try {
       await fetch(`${API}/api/videos/upload`, {
         method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`
+        },
         body: formData,
       })
 
@@ -65,7 +106,7 @@ export default function Dashboard() {
       setLatitude(null)
       setLongitude(null)
 
-      fetchVideos()
+      await fetchVideos()
     } finally {
       setLoading(false)
     }

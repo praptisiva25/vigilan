@@ -1,7 +1,9 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useParams } from "next/navigation"
+import { useParams, useRouter } from "next/navigation"
+import { supabase } from "@/lib/supabaseClient"
+
 import VideoPlayer from "./components/VideoPlayer"
 import ZoneCanvas from "./components/ZoneCanvas"
 import ZoneForm from "./components/ZoneForm"
@@ -13,9 +15,11 @@ const API = process.env.NEXT_PUBLIC_API_URL!
 
 export default function VideoPage() {
   const { id } = useParams()
+  const router = useRouter()
 
   const [video, setVideo] = useState<any>(null)
   const [zones, setZones] = useState<any[]>([])
+  const [selectedZones, setSelectedZones] = useState<number[]>([])
   const [intrusions, setIntrusions] = useState<any[]>([])
 
   const [jobId, setJobId] = useState<number | null>(null)
@@ -23,23 +27,53 @@ export default function VideoPage() {
   const [progress, setProgress] = useState<number>(0)
   const [points, setPoints] = useState<{ x: number; y: number }[]>([])
 
+  const getToken = async () => {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) {
+      router.push("/")
+      return null
+    }
+    return session.access_token
+  }
+
+  const authFetch = async (url: string, options: any = {}) => {
+    const token = await getToken()
+    if (!token) return null
+
+    const res = await fetch(`${API}${url}`, {
+      ...options,
+      headers: {
+        ...options.headers,
+        Authorization: `Bearer ${token}`,
+      },
+    })
+
+    if (!res.ok) {
+      console.error("Request failed:", res.status)
+      return null
+    }
+
+    if (res.status === 204) return null
+
+    return res.json()
+  }
+
   const loadVideo = async () => {
-    const res = await fetch(`${API}/api/videos`)
-    const data = await res.json()
+    const data = await authFetch("/api/videos")
+    if (!data) return
+
     const found = data.find((v: any) => v.id === Number(id))
     setVideo(found)
   }
 
   const loadZones = async () => {
-    const res = await fetch(`${API}/api/zones/video/${id}`)
-    const data = await res.json()
-    setZones(data)
+    const data = await authFetch(`/api/zones/video/${id}`)
+    if (data) setZones(data)
   }
 
   const loadIntrusions = async (jobId: number) => {
-    const res = await fetch(`${API}/api/intrusions/job/${jobId}`)
-    const data = await res.json()
-    setIntrusions(data)
+    const data = await authFetch(`/api/intrusions/job/${jobId}`)
+    if (data) setIntrusions(data)
   }
 
   useEffect(() => {
@@ -51,8 +85,8 @@ export default function VideoPage() {
     if (!jobId) return
 
     const interval = setInterval(async () => {
-      const res = await fetch(`${API}/api/monitoring/status/${jobId}`)
-      const data = await res.json()
+      const data = await authFetch(`/api/monitoring/status/${jobId}`)
+      if (!data) return
 
       setStatus(data.status)
       setProgress(data.progress)
@@ -66,18 +100,24 @@ export default function VideoPage() {
     return () => clearInterval(interval)
   }, [jobId])
 
-  const startMonitoring = async (mode: "LIVE" | "FAST") => {
-    const res = await fetch(
-      `${API}/api/monitoring/start/${id}?mode=${mode}`,
-      { method: "POST" }
-    )
-
-    const data = await res.json()
-
-    setJobId(data.jobId)
-    setStatus(data.status)
-    setProgress(data.progress)
+  const startMonitoring = async () => {
+  if (selectedZones.length === 0) {
+    alert("Select at least one zone")
+    return
   }
+
+  const data = await authFetch(`/api/monitoring/start/${id}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(selectedZones),
+  })
+
+  if (!data) return
+
+  setJobId(data.jobId)
+  setStatus(data.status)
+  setProgress(data.progress)
+}
 
   if (!video) return <p className="p-8">Loading...</p>
 
@@ -92,9 +132,19 @@ export default function VideoPage() {
         <ZoneCanvas zones={zones} points={points} setPoints={setPoints} />
       </div>
 
-      <ZoneForm videoId={Number(id)} points={points} clearPoints={() => setPoints([])} onCreated={loadZones} />
+      <ZoneForm
+        videoId={Number(id)}
+        points={points}
+        clearPoints={() => setPoints([])}
+        onCreated={loadZones}
+      />
 
-      <ZoneList zones={zones} onDelete={loadZones} />
+      <ZoneList
+  zones={zones}
+  selectedZones={selectedZones}
+  setSelectedZones={setSelectedZones}
+  onDelete={loadZones}
+/>
 
       <MonitoringPanel
         onStart={startMonitoring}

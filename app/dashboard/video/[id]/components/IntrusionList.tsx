@@ -13,8 +13,9 @@ export default function IntrusionList({ intrusions }: { intrusions: any[] }) {
 
           {intrusion.screenshotUrl && (
             <img
-              src={`${process.env.NEXT_PUBLIC_API_URL}/${intrusion.screenshotUrl}`}
-              className="w-48 mt-2 rounded"
+            src={intrusion.screenshotUrl}
+            className="w-48 mt-2 rounded"
+            alt="Intrusion Screenshot"
             />
           )}
         </div>

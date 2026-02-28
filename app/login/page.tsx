@@ -4,6 +4,8 @@ import { useState } from "react"
 import { supabase } from "../../lib/supabaseClient"
 import { useRouter } from "next/navigation"
 
+const API = process.env.NEXT_PUBLIC_API_URL
+
 export default function AuthPage() {
   const router = useRouter()
 
@@ -12,12 +14,25 @@ export default function AuthPage() {
   const [loading, setLoading] = useState(false)
   const [isLogin, setIsLogin] = useState(true)
 
+  const registerUserInBackend = async () => {
+    const { data: { session } } = await supabase.auth.getSession()
+
+    if (!session) return
+
+    await fetch(`${API}/api/users/me`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${session.access_token}`
+      }
+    })
+  }
+
   const handleAuth = async () => {
     setLoading(true)
 
     if (isLogin) {
       // LOGIN
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
@@ -25,6 +40,8 @@ export default function AuthPage() {
       if (error) {
         alert(error.message)
       } else {
+        // IMPORTANT: register user in backend
+        await registerUserInBackend()
         router.push("/dashboard")
       }
 

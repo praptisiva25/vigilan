@@ -17,7 +17,6 @@ export default function ZoneForm({
 }) {
   const [name, setName] = useState("")
   const [severity, setSeverity] = useState("LOW")
-  const [allowed, setAllowed] = useState("")
   const [blocked, setBlocked] = useState("")
 
   const createZone = async () => {
@@ -34,14 +33,12 @@ export default function ZoneForm({
         name,
         severity,
         polygonCoordinates: JSON.stringify(points),
-        allowedObjects: allowed,
         blockedObjects: blocked
       })
     })
 
     setName("")
     setSeverity("LOW")
-    setAllowed("")
     setBlocked("")
     clearPoints()
     onCreated()
@@ -65,13 +62,6 @@ export default function ZoneForm({
         <option value="MEDIUM">MEDIUM</option>
         <option value="HIGH">HIGH</option>
       </select>
-
-      <input
-        placeholder="Allowed Objects"
-        value={allowed}
-        onChange={(e) => setAllowed(e.target.value)}
-        className="border p-2 w-full"
-      />
 
       <input
         placeholder="Blocked Objects"
