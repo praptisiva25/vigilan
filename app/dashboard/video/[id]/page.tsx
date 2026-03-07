@@ -10,6 +10,8 @@ import ZoneForm from "./components/ZoneForm"
 import ZoneList from "./components/ZoneList"
 import MonitoringPanel from "./components/MonitoringPanel"
 import IntrusionList from "./components/IntrusionList"
+import SockJS from "sockjs-client"
+import { Client } from "@stomp/stompjs"
 
 const API = process.env.NEXT_PUBLIC_API_URL!
 
@@ -104,6 +106,39 @@ export default function VideoPage() {
     return () => clearInterval(interval)
   }, [jobId])
 
+  useEffect(() => {
+
+  if (!jobId) return
+
+  const socket = new SockJS(`${API}/ws`)
+  const client = new Client({
+    webSocketFactory: () => socket,
+  })
+
+  client.onConnect = () => {
+
+    client.subscribe(`/topic/intrusions/${jobId}`, (message) => {
+
+      const intrusion = JSON.parse(message.body)
+
+      setIntrusions(prev => [intrusion, ...prev])
+
+      if (intrusion.severity === "HIGH") {
+        alert("🚨 HIGH SEVERITY INTRUSION!")
+      }
+
+    })
+  }
+
+  client.activate()
+
+  return () => {
+    client.deactivate()
+  }
+
+}, [jobId])
+
+
   // ---------------- START MONITORING ----------------
   const startMonitoring = async () => {
     if (selectedZones.length === 0) {
@@ -127,60 +162,74 @@ export default function VideoPage() {
   if (!video) return <p className="p-8">Loading...</p>
 
   return (
-    <div className="p-8 space-y-6">
+  <div className="p-2">
 
-      <h1 className="text-2xl font-bold">
-        Configure Zones — {video.name}
-      </h1>
+    <h1 className="text-2xl font-bold mb-2">
+      Configure Zones — {video.name}
+    </h1>
 
-      {/* Drawing Toggle */}
-      <button
-        onClick={() => setDrawingMode(!drawingMode)}
-        className="bg-blue-600 text-white px-4 py-2 rounded"
-      >
-        {drawingMode ? "Stop Drawing" : "Draw Zone"}
-      </button>
+    <div className="flex gap-8">
 
-      {/* Video + Canvas */}
-      <div className="relative w-full max-w-4xl aspect-video">
-        <VideoPlayer src={video.filePath} />
-        <ZoneCanvas
-          zones={zones}
+      {/* LEFT SIDE — VIDEO + CONTROLS */}
+      <div className="flex-1 space-y-6">
+
+        {/* Drawing Toggle */}
+        <button
+          onClick={() => setDrawingMode(!drawingMode)}
+          className="bg-blue-600 text-white px-4 py-2 rounded"
+        >
+          {drawingMode ? "Stop Drawing" : "Draw Zone"}
+        </button>
+
+        {/* Video + Canvas */}
+        <div className="relative w-full max-w-4xl aspect-video">
+          <VideoPlayer src={video.filePath} />
+          <ZoneCanvas
+            zones={zones}
+            points={points}
+            setPoints={setPoints}
+            editable={drawingMode}
+          />
+        </div>
+
+        {/* Zone Creation */}
+        <ZoneForm
+          videoId={Number(id)}
           points={points}
-          setPoints={setPoints}
-          editable={drawingMode}
+          clearPoints={() => setPoints([])}
+          onCreated={() => {
+            loadZones()
+            setDrawingMode(false)
+          }}
         />
+
+        {/* Zone Selection */}
+        <ZoneList
+          zones={zones}
+          selectedZones={selectedZones}
+          setSelectedZones={setSelectedZones}
+          onDelete={loadZones}
+        />
+
+        {/* Monitoring */}
+        <MonitoringPanel
+          onStart={startMonitoring}
+          status={status}
+          progress={progress}
+        />
+
       </div>
 
-      {/* Zone Creation Form */}
-      <ZoneForm
-        videoId={Number(id)}
-        points={points}
-        clearPoints={() => setPoints([])}
-        onCreated={() => {
-          loadZones()
-          setDrawingMode(false)
-        }}
-      />
 
-      {/* Zone Selection List */}
-      <ZoneList
-        zones={zones}
-        selectedZones={selectedZones}
-        setSelectedZones={setSelectedZones}
-        onDelete={loadZones}
-      />
+      {/* RIGHT SIDE — INTRUSION ALERTS */}
+      <div className="w-96 sticky top-3">
 
-      {/* Monitoring Panel */}
-      <MonitoringPanel
-        onStart={startMonitoring}
-        status={status}
-        progress={progress}
-      />
+        <IntrusionList intrusions={intrusions} />
 
-      {/* Intrusions */}
-      <IntrusionList intrusions={intrusions} />
+      </div>
 
     </div>
-  )
+
+  </div>
+)
 }

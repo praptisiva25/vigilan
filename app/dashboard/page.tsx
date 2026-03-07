@@ -17,6 +17,7 @@ export default function Dashboard() {
 
   const [file, setFile] = useState<File | null>(null)
   const [cameraId, setCameraId] = useState("")
+  const [description, setDescription] = useState("")
   const [latitude, setLatitude] = useState<number | null>(null)
   const [longitude, setLongitude] = useState<number | null>(null)
   const [videos, setVideos] = useState<any[]>([])
@@ -87,6 +88,7 @@ export default function Dashboard() {
     const formData = new FormData()
     formData.append("file", file)
     formData.append("cameraId", cameraId)
+    formData.append("description", description)
     formData.append("latitude", latitude.toString())
     formData.append("longitude", longitude.toString())
 
@@ -103,6 +105,7 @@ export default function Dashboard() {
 
       setFile(null)
       setCameraId("")
+      setDescription("")
       setLatitude(null)
       setLongitude(null)
 
@@ -135,6 +138,14 @@ export default function Dashboard() {
           placeholder="Camera ID"
           value={cameraId}
           onChange={(e) => setCameraId(e.target.value)}
+          className="block w-full mb-3 p-2 border rounded"
+        />
+
+        <input
+          type="text"
+          placeholder="Description"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
           className="block w-full mb-3 p-2 border rounded"
         />
 
