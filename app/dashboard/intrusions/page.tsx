@@ -17,6 +17,7 @@ export default function IntrusionsPage() {
   const [selectedVideo, setSelectedVideo] = useState<any | null>(null)
 
   const [search, setSearch] = useState("")
+  const [generatingPDF, setGeneratingPDF] = useState(false)
 
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const videoContainerRef = useRef<HTMLDivElement | null>(null)
@@ -52,7 +53,6 @@ export default function IntrusionsPage() {
     if (data) setVideos(data)
   }
 
-  // ---------------- LOAD JOBS ----------------
   const loadJobs = async (videoId: number) => {
 
     const data = await authFetch(`/api/monitoring/video/${videoId}`)
@@ -60,7 +60,6 @@ export default function IntrusionsPage() {
     if (data) setJobs(data)
   }
 
-  // ---------------- LOAD INTRUSIONS ----------------
   const loadIntrusions = async (jobId: number) => {
 
     const data = await authFetch(`/api/intrusions/job/${jobId}`)
@@ -72,7 +71,6 @@ export default function IntrusionsPage() {
     loadVideos()
   }, [search])
 
-  // ---------------- SELECT VIDEO ----------------
   const selectVideo = (video: any) => {
 
     setSelectedVideo(video)
@@ -82,13 +80,11 @@ export default function IntrusionsPage() {
     setIntrusions([])
   }
 
-  // ---------------- SELECT JOB ----------------
   const selectJob = (job: any) => {
 
     loadIntrusions(job.jobId)
   }
 
-  // ---------------- PLAY INTRUSION ----------------
   const playAtTime = (seconds: number) => {
 
     if (!videoRef.current) return
@@ -102,45 +98,124 @@ export default function IntrusionsPage() {
     videoRef.current.play()
   }
 
-  // ---------------- DOWNLOAD PDF ----------------
-  const downloadPDF = async () => {
+  // ---------- IMAGE LOADER ----------
+  const loadImage = (url: string) => {
 
-    const pdf = new jsPDF()
+    return new Promise<string>((resolve) => {
 
-    let y = 20
+      const img = new Image()
 
-    pdf.setFontSize(18)
-    pdf.text("Vigilan Intrusion Report", 14, 15)
+      img.crossOrigin = "anonymous"
+      img.src = url
 
-    for (const intrusion of intrusions) {
+      img.onload = () => {
 
-      if (y > 250) {
-        pdf.addPage()
-        y = 20
+        const canvas = document.createElement("canvas")
+
+        canvas.width = img.width
+        canvas.height = img.height
+
+        const ctx = canvas.getContext("2d")
+
+        ctx?.drawImage(img, 0, 0)
+
+        resolve(canvas.toDataURL("image/jpeg"))
       }
-
-      pdf.setFontSize(12)
-
-      pdf.text(`Severity: ${intrusion.severity}`, 14, y)
-      y += 6
-
-      pdf.text(`Zone: ${intrusion.name ?? intrusion.zoneId}`, 14, y)
-      y += 6
-
-      pdf.text(`Detected: ${intrusion.blockedObjects}`, 14, y)
-      y += 6
-
-      pdf.text(`Entry Time: ${intrusion.entryTimeSeconds?.toFixed(2)}s`, 14, y)
-      y += 6
-
-      pdf.text(`Duration: ${intrusion.durationSeconds?.toFixed(2)}s`, 14, y)
-      y += 8
-
-      y += 10
-    }
-
-    pdf.save("intrusion-report.pdf")
+    })
   }
+
+  // ---------- DOWNLOAD PDF ----------
+   const downloadPDF = () => {
+
+const pdf = new jsPDF()
+
+let y = 30
+let count = 1
+
+// -------- HEADER BANNER --------
+pdf.setFillColor(37, 99, 235)
+pdf.rect(0, 0, 210, 22, "F")
+
+pdf.setTextColor(255, 255, 255)
+pdf.setFontSize(18)
+pdf.text("VIGILAN SECURITY REPORT", 14, 14)
+
+pdf.setFontSize(10)
+pdf.text("AI Monitoring System", 150, 14)
+
+pdf.setTextColor(0,0,0)
+
+// -------- REPORT INFO --------
+pdf.setFontSize(12)
+pdf.text(`Camera: ${selectedVideo?.name ?? "Unknown Camera"}`, 14, y)
+y += 7
+
+pdf.text(`Generated: ${new Date().toLocaleString()}`, 14, y)
+y += 7
+
+pdf.text(`Total Intrusions: ${intrusions.length}`, 14, y)
+
+y += 12
+
+// -------- DIVIDER --------
+pdf.setDrawColor(200,200,200)
+pdf.line(14, y, 196, y)
+
+y += 10
+
+// -------- INTRUSIONS --------
+for (const intrusion of intrusions) {
+
+
+if (y > 260) {
+  pdf.addPage()
+  y = 20
+}
+
+// Severity color
+if (intrusion.severity === "HIGH") pdf.setTextColor(220,38,38)
+else if (intrusion.severity === "MEDIUM") pdf.setTextColor(245,158,11)
+else pdf.setTextColor(22,163,74)
+
+pdf.setFontSize(13)
+pdf.text(`Intrusion #${count} - ${intrusion.severity}`, 14, y)
+
+pdf.setTextColor(0,0,0)
+
+y += 7
+
+pdf.setFontSize(11)
+
+pdf.text(`Zone: ${intrusion.name ?? intrusion.zoneId}`, 14, y)
+y += 6
+
+pdf.text(`Detected Object: ${intrusion.blockedObjects}`, 14, y)
+y += 6
+
+pdf.text(`Entry Time: ${intrusion.entryTimeSeconds?.toFixed(2)} seconds`, 14, y)
+y += 6
+
+pdf.text(`Exit Time: ${intrusion.exitTimeSeconds?.toFixed(2)} seconds`, 14, y)
+y += 6
+
+pdf.text(`Duration: ${intrusion.durationSeconds?.toFixed(2)} seconds`, 14, y)
+
+y += 10
+
+// divider between intrusions
+pdf.setDrawColor(220,220,220)
+pdf.line(14, y, 196, y)
+
+y += 10
+
+count++
+
+
+}
+
+pdf.save("vigilan_intrusion_report.pdf")
+}
+
 
   return (
     <div className="flex h-screen">
@@ -179,21 +254,20 @@ export default function IntrusionsPage() {
           Monitoring Jobs
         </h3>
 
-        {jobs.length === 0 && (
-          <p className="text-sm text-gray-500">
-            No jobs for this camera
-          </p>
-        )}
-
         {jobs.map(job => (
           <div
             key={job.jobId}
             onClick={() => selectJob(job)}
             className="border p-2 rounded mb-2 cursor-pointer hover:bg-gray-100"
           >
-            <p className="font-semibold">
-              Job #{job.jobId}
-            </p>
+           <p className="font-semibold">
+  Job #{job.jobId}
+  {job.startedAt && (
+    <span className="text-xs text-gray-500 ml-2">
+      Started at {new Date(job.startedAt).toLocaleString()}
+    </span>
+  )}
+</p>
 
             <p className="text-sm text-gray-600">
               Status: {job.status}
@@ -217,9 +291,10 @@ export default function IntrusionsPage() {
 
             <button
               onClick={downloadPDF}
+              disabled={generatingPDF}
               className="bg-green-600 text-white px-4 py-2 rounded"
             >
-              Download Intrusion PDF
+              {generatingPDF ? "Generating PDF..." : "Download Intrusion PDF"}
             </button>
 
             <div ref={videoContainerRef} className="max-w-4xl">
@@ -255,6 +330,10 @@ export default function IntrusionsPage() {
                     </p>
 
                     <p className="text-sm">
+                      Time: {intrusion.startedAt}
+                    </p>
+
+                    <p className="text-sm">
                       Zone: {intrusion.name ?? intrusion.zoneId}
                     </p>
 
@@ -271,24 +350,22 @@ export default function IntrusionsPage() {
                     </p>
 
                     {intrusion.screenshotUrl && (
-  <div className="mt-2 relative">
+                      <div className="mt-2 relative">
 
-    <img
-      src={intrusion.screenshotUrl}
-      className="w-full rounded"
-      alt="Intrusion Screenshot"
-    />
+                        <img
+                          src={intrusion.screenshotUrl}
+                          className="w-full rounded"
+                        />
 
-    <button
-      onClick={() => window.open(intrusion.screenshotUrl, "_blank")}
-      className="absolute top-2 right-2 bg-black/70 text-white p-1 rounded hover:bg-black"
-      title="View Image"
-    >
-      👁
-    </button>
+                        <button
+                          onClick={() => window.open(intrusion.screenshotUrl, "_blank")}
+                          className="absolute top-2 right-2 bg-black/70 text-white p-1 rounded"
+                        >
+                          👁
+                        </button>
 
-  </div>
-)}
+                      </div>
+                    )}
 
                     <button
                       onClick={() => playAtTime(intrusion.entryTimeSeconds)}

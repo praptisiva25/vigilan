@@ -37,6 +37,13 @@ export default function Sidebar() {
         >
           Intrusions
         </Link>
+
+        <Link
+          href="/dashboard/statistics"
+          className="block p-3 rounded-lg text-slate-600 hover:bg-blue-50 hover:text-blue-600 transition"
+        >
+          Statistics
+        </Link>
       </nav>
     </div>
   )
