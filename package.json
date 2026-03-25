@@ -12,6 +12,7 @@
     "@stomp/stompjs": "^7.3.0",
     "@supabase/supabase-js": "^2.97.0",
     "chart.js": "^4.5.1",
+    "chartjs-plugin-datalabels": "^2.2.0",
     "jspdf": "^4.2.0",
     "leaflet": "^1.9.4",
     "leaflet-control-geocoder": "^3.3.1",

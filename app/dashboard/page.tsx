@@ -127,11 +127,22 @@ export default function Dashboard() {
           Upload Video & Set Camera Location
         </h2>
 
-        <input
-          type="file"
-          className="mb-3"
-          onChange={(e) => setFile(e.target.files?.[0] || null)}
-        />
+        <label className="flex items-center justify-between border-2 border-dashed border-gray-300 rounded-lg p-4 mb-3 cursor-pointer hover:border-blue-500 transition">
+    <span className="text-gray-500 truncate">
+      {file ? file.name : "No file chosen"}
+    </span>
+
+    <span className="bg-blue-500 text-white px-4 py-1 rounded-md text-sm">
+      Browse
+    </span>
+
+    <input
+      type="file"
+      className="hidden"
+      onChange={(e) => setFile(e.target.files?.[0] || null)}
+    />
+  </label>
+
 
         <input
           type="text"
