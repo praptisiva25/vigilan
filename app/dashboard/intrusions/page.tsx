@@ -1,15 +1,12 @@
 "use client"
 
 import { useEffect, useState, useRef } from "react"
-import { useRouter } from "next/navigation"
 import { supabase } from "../../../lib/supabaseClient"
 import { jsPDF } from "jspdf"
 
 const API = process.env.NEXT_PUBLIC_API_URL!
 
 export default function IntrusionsPage() {
-
-  const router = useRouter()
 
   const [videos, setVideos] = useState<any[]>([])
   const [jobs, setJobs] = useState<any[]>([])
@@ -19,11 +16,11 @@ export default function IntrusionsPage() {
   const [selectedCamera, setSelectedCamera] = useState<string | null>(null)
 
   const [search, setSearch] = useState("")
-  const [generatingPDF, setGeneratingPDF] = useState(false)
+  const [selectedImage, setSelectedImage] = useState<string | null>(null)
 
   const videoRef = useRef<HTMLVideoElement | null>(null)
-  const videoContainerRef = useRef<HTMLDivElement | null>(null)
 
+  // ---------- AUTH ---------- //
   const getToken = async () => {
     const { data: { session } } = await supabase.auth.getSession()
     return session?.access_token
@@ -41,6 +38,10 @@ export default function IntrusionsPage() {
     return res.json()
   }
 
+  useEffect(() => {
+    loadVideos()
+  }, [])
+
   const loadVideos = async () => {
     const data = await authFetch("/api/videos")
     if (data) setVideos(data)
@@ -56,32 +57,6 @@ export default function IntrusionsPage() {
     if (data) setIntrusions(data)
   }
 
-  useEffect(() => {
-    loadVideos()
-  }, [])
-
-  const selectVideo = (video: any) => {
-    setSelectedVideo(video)
-    loadJobs(video.id)
-    setIntrusions([])
-  }
-
-  const selectJob = (job: any) => {
-    loadIntrusions(job.jobId)
-  }
-
-  const playAtTime = (seconds: number) => {
-    if (!videoRef.current) return
-
-    videoContainerRef.current?.scrollIntoView({
-      behavior: "smooth",
-      block: "start"
-    })
-
-    videoRef.current.currentTime = seconds
-    videoRef.current.play()
-  }
-
   const grouped = videos.reduce((acc: any, v: any) => {
     if (!acc[v.cameraId]) acc[v.cameraId] = []
     acc[v.cameraId].push(v)
@@ -92,15 +67,78 @@ export default function IntrusionsPage() {
     cam.toLowerCase().includes(search.toLowerCase())
   )
 
+  const playAtTime = (seconds: number) => {
+    if (!videoRef.current) return
+    videoRef.current.currentTime = seconds
+    videoRef.current.play()
+  }
+
+  // ================= PDF ================= //
+
   const downloadPDF = () => {
     const pdf = new jsPDF()
-    pdf.text("Intrusion Report", 20, 20)
-    pdf.save("report.pdf")
+
+    // HEADER
+    pdf.setFillColor(30, 64, 175)
+    pdf.rect(0, 0, 210, 30, "F")
+
+    pdf.setTextColor(255, 255, 255)
+    pdf.setFontSize(18)
+    pdf.text("VIGILAN REPORT", 20, 18)
+    pdf.setFontSize(10)
+    pdf.text("Intrusion Monitoring System", 20, 25)
+
+    pdf.setTextColor(0, 0, 0)
+
+    let y = 40
+
+    pdf.setFontSize(11)
+    pdf.text(`Camera: ${selectedCamera || "N/A"}`, 20, y)
+    y += 6
+    pdf.text(`Video: ${selectedVideo?.name || "N/A"}`, 20, y)
+    y += 6
+    pdf.text(`Generated: ${new Date().toLocaleString()}`, 20, y)
+
+    y += 10
+
+    intrusions.forEach((i, index) => {
+
+      if (y > 270) {
+        pdf.addPage()
+        y = 20
+      }
+
+      pdf.setFont("helvetica", "bold")
+pdf.text(`Alert ${index + 1} (${i.severity})`, 20, y)
+y += 6
+
+pdf.setFont("helvetica", "normal")
+
+pdf.text(`Camera: ${selectedCamera || "N/A"}`, 20, y); y += 5
+pdf.text(`Video: ${selectedVideo?.name || "N/A"}`, 20, y); y += 5
+
+pdf.text(`ID: ${i.id}`, 20, y); y += 5
+pdf.text(`Job ID: ${i.jobId}`, 20, y); y += 5
+pdf.text(`Zone ID: ${i.zoneId}`, 20, y); y += 5
+pdf.text(`Object ID: ${i.objectId}`, 20, y); y += 5
+
+pdf.text(`Zone Name: ${i.name}`, 20, y); y += 5
+pdf.text(`Blocked Objects: ${i.blockedObjects}`, 20, y); y += 5
+
+pdf.text(`Entry: ${i.entryTimeSeconds?.toFixed(2)}s`, 20, y); y += 5
+pdf.text(`Exit: ${i.exitTimeSeconds?.toFixed(2)}s`, 20, y); y += 5
+pdf.text(`Duration: ${i.durationSeconds?.toFixed(2)}s`, 20, y); y += 8
+    })
+
+    pdf.save("vigilan_report.pdf")
   }
+
+  // ================= UI ================= //
 
   return (
     <div className="flex h-screen">
 
+      {/* SIDEBAR */}
       <div className="w-80 border-r p-4 bg-white overflow-y-auto">
 
         <h2 className="text-xl font-bold mb-4">Cameras</h2>
@@ -113,140 +151,111 @@ export default function IntrusionsPage() {
         />
 
         {filteredCameras.map((cam) => (
-
           <div key={cam} className="mb-3">
 
             <div
               onClick={() =>
                 setSelectedCamera(selectedCamera === cam ? null : cam)
               }
-              className="p-2 font-semibold cursor-pointer bg-gray-100 rounded hover:bg-gray-200"
+              className="p-2 font-semibold cursor-pointer bg-gray-100 rounded"
             >
-              {selectedCamera === cam ? "▼" : "▶"} {cam}
+              {cam}
             </div>
 
             {selectedCamera === cam && (
-
               <div className="ml-3 mt-2 space-y-2">
-
                 {grouped[cam].map((video: any) => (
-
                   <div
                     key={video.id}
-                    onClick={() => selectVideo(video)}
-                    className={`p-2 rounded cursor-pointer ${
-                      selectedVideo?.id === video.id
-                        ? "bg-blue-100"
-                        : "hover:bg-gray-100"
-                    }`}
+                    onClick={() => {
+                      setSelectedVideo(video)
+                      loadJobs(video.id)
+                      setIntrusions([])
+                    }}
+                    className="p-2 cursor-pointer hover:bg-gray-100"
                   >
                     {video.name}
                   </div>
-
                 ))}
-
               </div>
-
             )}
 
           </div>
-
         ))}
 
         <hr className="my-4" />
 
-        <h3 className="font-semibold mb-2">Monitoring Jobs</h3>
-
         {jobs.map(job => (
           <div
             key={job.jobId}
-            onClick={() => selectJob(job)}
-            className="border p-2 rounded mb-2 cursor-pointer hover:bg-gray-100"
+            onClick={() => loadIntrusions(job.jobId)}
+            className="border p-2 mb-2 cursor-pointer"
           >
-            <p className="font-semibold">
-              Job #{job.jobId}
-              {job.startedAt && (
-                <span className="text-xs text-gray-500 ml-2">
-                  {new Date(job.startedAt).toLocaleString()}
-                </span>
-              )}
-            </p>
-
-            <p className="text-sm text-gray-600">
-              Status: {job.status}
-            </p>
+            Job #{job.jobId}
           </div>
         ))}
 
       </div>
 
+      {/* MAIN */}
       <div className="flex-1 p-6 overflow-y-auto">
-
-        {!selectedVideo && (
-          <p className="text-gray-500">
-            Select a camera to view intrusions
-          </p>
-        )}
 
         {selectedVideo && (
           <div className="space-y-6">
 
             <button
               onClick={downloadPDF}
-              disabled={generatingPDF}
-              className="bg-green-600 text-white px-4 py-2 rounded"
+              className="bg-blue-600 text-white px-4 py-2 rounded"
             >
-              Download Intrusion PDF
+              📄 Download Report
             </button>
 
-            <div ref={videoContainerRef} className="max-w-4xl">
-
-              <video
-                ref={videoRef}
-                src={selectedVideo.filePath}
-                controls
-                className="w-full rounded shadow"
-              />
-
-            </div>
+            <video
+              ref={videoRef}
+              src={selectedVideo.filePath}
+              controls
+              className="w-full max-w-4xl"
+            />
 
             <div className="grid grid-cols-3 gap-4">
 
-              {intrusions.map((intrusion) => {
+              {intrusions.map((i) => (
+                <div key={i.id} className="border p-4 rounded shadow">
 
-                const severityColor =
-                  intrusion.severity === "HIGH"
-                    ? "border-red-500 bg-red-50"
-                    : intrusion.severity === "MEDIUM"
-                    ? "border-yellow-500 bg-yellow-50"
-                    : "border-green-500 bg-green-50"
+  <p className="font-bold text-lg">{i.severity} ALERT</p>
 
-                return (
-                  <div
-                    key={intrusion.id}
-                    className={`border-l-4 p-4 rounded shadow ${severityColor}`}
-                  >
-                    <p className="font-bold mb-1">
-                      {intrusion.severity} ALERT
-                    </p>
+  <p><b>Camera:</b> {selectedCamera}</p>
+  <p><b>Video:</b> {selectedVideo?.name}</p>
 
-                    <p className="text-sm">
-                      Entry: {intrusion.entryTimeSeconds?.toFixed(2)}s
-                    </p>
+  <p><b>ID:</b> {i.id}</p>
+  <p><b>Job Id:</b> {i.jobId}</p>
+  <p><b>Zone Id:</b> {i.zoneId}</p>
+  <p><b>Object Id:</b> {i.objectId}</p>
 
-                    <p className="text-sm">
-                      Duration: {intrusion.durationSeconds?.toFixed(2)}s
-                    </p>
+  <p><b>Zone Name:</b> {i.name}</p>
+  <p><b>Blocked Object:</b> {i.blockedObjects}</p>
 
-                    <button
-                      onClick={() => playAtTime(intrusion.entryTimeSeconds)}
-                      className="mt-3 bg-blue-600 text-white px-3 py-1 rounded w-full"
-                    >
-                      ▶ Play
-                    </button>
-                  </div>
-                )
-              })}
+  <p><b>Entry:</b> {i.entryTimeSeconds?.toFixed(2)}s</p>
+  <p><b>Exit:</b> {i.exitTimeSeconds?.toFixed(2)}s</p>
+  <p><b>Duration:</b> {i.durationSeconds?.toFixed(2)}s</p>
+
+  {i.screenshotUrl && (
+    <img
+      src={i.screenshotUrl}
+      className="mt-2 h-32 w-full object-cover cursor-pointer"
+      onClick={() => setSelectedImage(i.screenshotUrl)}
+    />
+  )}
+
+  <button
+    onClick={() => playAtTime(i.entryTimeSeconds)}
+    className="mt-2 bg-green-600 text-white px-2 py-1 w-full"
+  >
+    ▶ Play
+  </button>
+
+</div>
+              ))}
 
             </div>
 
@@ -254,6 +263,16 @@ export default function IntrusionsPage() {
         )}
 
       </div>
+
+      {/* IMAGE MODAL */}
+      {selectedImage && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center"
+          onClick={() => setSelectedImage(null)}
+        >
+          <img src={selectedImage} className="max-h-[90%] max-w-[90%]" />
+        </div>
+      )}
 
     </div>
   )
