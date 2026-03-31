@@ -7,22 +7,25 @@ import { jsPDF } from "jspdf"
 const API = process.env.NEXT_PUBLIC_API_URL!
 
 export default function IntrusionsPage() {
-
   const [videos, setVideos] = useState<any[]>([])
   const [jobs, setJobs] = useState<any[]>([])
   const [intrusions, setIntrusions] = useState<any[]>([])
 
   const [selectedVideo, setSelectedVideo] = useState<any | null>(null)
   const [selectedCamera, setSelectedCamera] = useState<string | null>(null)
+  const [selectedJobId, setSelectedJobId] = useState<number | null>(null)
 
   const [search, setSearch] = useState("")
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
 
   const videoRef = useRef<HTMLVideoElement | null>(null)
+  const videoSectionRef = useRef<HTMLDivElement | null>(null)
 
   // ---------- AUTH ---------- //
   const getToken = async () => {
-    const { data: { session } } = await supabase.auth.getSession()
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
     return session?.access_token
   }
 
@@ -31,7 +34,7 @@ export default function IntrusionsPage() {
     if (!token) return null
 
     const res = await fetch(`${API}${url}`, {
-      headers: { Authorization: `Bearer ${token}` }
+      headers: { Authorization: `Bearer ${token}` },
     })
 
     if (!res.ok) return null
@@ -55,6 +58,7 @@ export default function IntrusionsPage() {
   const loadIntrusions = async (jobId: number) => {
     const data = await authFetch(`/api/intrusions/job/${jobId}`)
     if (data) setIntrusions(data)
+    setSelectedJobId(jobId)
   }
 
   const grouped = videos.reduce((acc: any, v: any) => {
@@ -63,14 +67,24 @@ export default function IntrusionsPage() {
     return acc
   }, {})
 
-  const filteredCameras = Object.keys(grouped).filter(cam =>
+  const filteredCameras = Object.keys(grouped).filter((cam) =>
     cam.toLowerCase().includes(search.toLowerCase())
   )
 
   const playAtTime = (seconds: number) => {
     if (!videoRef.current) return
-    videoRef.current.currentTime = seconds
-    videoRef.current.play()
+
+    // scroll up to video first
+    videoSectionRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    })
+
+    setTimeout(() => {
+      if (!videoRef.current) return
+      videoRef.current.currentTime = seconds || 0
+      videoRef.current.play()
+    }, 300)
   }
 
   // ================= PDF ================= //
@@ -97,37 +111,42 @@ export default function IntrusionsPage() {
     y += 6
     pdf.text(`Video: ${selectedVideo?.name || "N/A"}`, 20, y)
     y += 6
+    pdf.text(`Job ID: ${selectedJobId || "N/A"}`, 20, y)
+    y += 6
     pdf.text(`Generated: ${new Date().toLocaleString()}`, 20, y)
 
     y += 10
 
     intrusions.forEach((i, index) => {
-
       if (y > 270) {
         pdf.addPage()
         y = 20
       }
 
       pdf.setFont("helvetica", "bold")
-pdf.text(`Alert ${index + 1} (${i.severity})`, 20, y)
-y += 6
+      pdf.text(`Alert ${index + 1} (${i.severity})`, 20, y)
+      y += 6
 
-pdf.setFont("helvetica", "normal")
+      pdf.setFont("helvetica", "normal")
 
-pdf.text(`Camera: ${selectedCamera || "N/A"}`, 20, y); y += 5
-pdf.text(`Video: ${selectedVideo?.name || "N/A"}`, 20, y); y += 5
+      pdf.text(`ID: ${i.id}`, 20, y)
+      y += 5
+      pdf.text(`Zone ID: ${i.zoneId}`, 20, y)
+      y += 5
+      pdf.text(`Object ID: ${i.objectId}`, 20, y)
+      y += 5
 
-pdf.text(`ID: ${i.id}`, 20, y); y += 5
-pdf.text(`Job ID: ${i.jobId}`, 20, y); y += 5
-pdf.text(`Zone ID: ${i.zoneId}`, 20, y); y += 5
-pdf.text(`Object ID: ${i.objectId}`, 20, y); y += 5
+      pdf.text(`Zone Name: ${i.name}`, 20, y)
+      y += 5
+      pdf.text(`Blocked Objects: ${i.blockedObjects}`, 20, y)
+      y += 5
 
-pdf.text(`Zone Name: ${i.name}`, 20, y); y += 5
-pdf.text(`Blocked Objects: ${i.blockedObjects}`, 20, y); y += 5
-
-pdf.text(`Entry: ${i.entryTimeSeconds?.toFixed(2)}s`, 20, y); y += 5
-pdf.text(`Exit: ${i.exitTimeSeconds?.toFixed(2)}s`, 20, y); y += 5
-pdf.text(`Duration: ${i.durationSeconds?.toFixed(2)}s`, 20, y); y += 8
+      pdf.text(`Entry: ${i.entryTimeSeconds?.toFixed(2)}s`, 20, y)
+      y += 5
+      pdf.text(`Exit: ${i.exitTimeSeconds?.toFixed(2)}s`, 20, y)
+      y += 5
+      pdf.text(`Duration: ${i.durationSeconds?.toFixed(2)}s`, 20, y)
+      y += 8
     })
 
     pdf.save("vigilan_report.pdf")
@@ -137,10 +156,8 @@ pdf.text(`Duration: ${i.durationSeconds?.toFixed(2)}s`, 20, y); y += 8
 
   return (
     <div className="flex h-screen">
-
       {/* SIDEBAR */}
       <div className="w-80 border-r p-4 bg-white overflow-y-auto">
-
         <h2 className="text-xl font-bold mb-4">Cameras</h2>
 
         <input
@@ -152,7 +169,6 @@ pdf.text(`Duration: ${i.durationSeconds?.toFixed(2)}s`, 20, y); y += 8
 
         {filteredCameras.map((cam) => (
           <div key={cam} className="mb-3">
-
             <div
               onClick={() =>
                 setSelectedCamera(selectedCamera === cam ? null : cam)
@@ -171,6 +187,7 @@ pdf.text(`Duration: ${i.durationSeconds?.toFixed(2)}s`, 20, y); y += 8
                       setSelectedVideo(video)
                       loadJobs(video.id)
                       setIntrusions([])
+                      setSelectedJobId(null)
                     }}
                     className="p-2 cursor-pointer hover:bg-gray-100"
                   >
@@ -179,13 +196,12 @@ pdf.text(`Duration: ${i.durationSeconds?.toFixed(2)}s`, 20, y); y += 8
                 ))}
               </div>
             )}
-
           </div>
         ))}
 
         <hr className="my-4" />
 
-        {jobs.map(job => (
+        {jobs.map((job) => (
           <div
             key={job.jobId}
             onClick={() => loadIntrusions(job.jobId)}
@@ -194,14 +210,19 @@ pdf.text(`Duration: ${i.durationSeconds?.toFixed(2)}s`, 20, y); y += 8
             Job #{job.jobId}
           </div>
         ))}
-
       </div>
 
       {/* MAIN */}
       <div className="flex-1 p-6 overflow-y-auto">
-
         {selectedVideo && (
           <div className="space-y-6">
+            {/* TOP INFO ABOVE BUTTON + VIDEO */}
+            <div className="flex flex-wrap items-center gap-6 text-sm bg-slate-100 text-slate-700 px-4 py-3 rounded-md border border-slate-200">
+              <p><span className="font-semibold text-slate-900">Camera:</span> {selectedCamera || "N/A"}</p>
+              <p><span className="font-semibold text-slate-900">Video:</span> {selectedVideo?.name || "N/A"}</p>
+              <p><span className="font-semibold text-slate-900">Job Id:</span> {selectedJobId || "N/A"}</p>
+              <p><span className="font-semibold text-slate-900">ID:</span> {intrusions.length > 0 ? intrusions[0].id : "N/A"}</p>
+            </div>
 
             <button
               onClick={downloadPDF}
@@ -210,58 +231,49 @@ pdf.text(`Duration: ${i.durationSeconds?.toFixed(2)}s`, 20, y); y += 8
               📄 Download Report
             </button>
 
-            <video
-              ref={videoRef}
-              src={selectedVideo.filePath}
-              controls
-              className="w-full max-w-4xl"
-            />
-
-            <div className="grid grid-cols-3 gap-4">
-
-              {intrusions.map((i) => (
-                <div key={i.id} className="border p-4 rounded shadow">
-
-  <p className="font-bold text-lg">{i.severity} ALERT</p>
-
-  <p><b>Camera:</b> {selectedCamera}</p>
-  <p><b>Video:</b> {selectedVideo?.name}</p>
-
-  <p><b>ID:</b> {i.id}</p>
-  <p><b>Job Id:</b> {i.jobId}</p>
-  <p><b>Zone Id:</b> {i.zoneId}</p>
-  <p><b>Object Id:</b> {i.objectId}</p>
-
-  <p><b>Zone Name:</b> {i.name}</p>
-  <p><b>Blocked Object:</b> {i.blockedObjects}</p>
-
-  <p><b>Entry:</b> {i.entryTimeSeconds?.toFixed(2)}s</p>
-  <p><b>Exit:</b> {i.exitTimeSeconds?.toFixed(2)}s</p>
-  <p><b>Duration:</b> {i.durationSeconds?.toFixed(2)}s</p>
-
-  {i.screenshotUrl && (
-    <img
-      src={i.screenshotUrl}
-      className="mt-2 h-32 w-full object-cover cursor-pointer"
-      onClick={() => setSelectedImage(i.screenshotUrl)}
-    />
-  )}
-
-  <button
-    onClick={() => playAtTime(i.entryTimeSeconds)}
-    className="mt-2 bg-green-600 text-white px-2 py-1 w-full"
-  >
-    ▶ Play
-  </button>
-
-</div>
-              ))}
-
+            <div ref={videoSectionRef}>
+              <video
+                ref={videoRef}
+                src={selectedVideo.filePath}
+                controls
+                className="w-full max-w-4xl"
+              />
             </div>
 
+            <div className="grid grid-cols-3 gap-4">
+              {intrusions.map((i) => (
+                <div key={i.id} className="border p-4 rounded shadow">
+                  <p className="font-bold text-lg">{i.severity} ALERT</p>
+
+                  <p><b>Zone Id:</b> {i.zoneId}</p>
+                  <p><b>Object Id:</b> {i.objectId}</p>
+
+                  <p><b>Zone Name:</b> {i.name}</p>
+                  <p><b>Blocked Object:</b> {i.blockedObjects}</p>
+
+                  <p><b>Entry:</b> {i.entryTimeSeconds?.toFixed(2)}s</p>
+                  <p><b>Exit:</b> {i.exitTimeSeconds?.toFixed(2)}s</p>
+                  <p><b>Duration:</b> {i.durationSeconds?.toFixed(2)}s</p>
+
+                  {i.screenshotUrl && (
+                    <img
+                      src={i.screenshotUrl}
+                      className="mt-2 h-32 w-full object-cover cursor-pointer"
+                      onClick={() => setSelectedImage(i.screenshotUrl)}
+                    />
+                  )}
+
+                  <button
+                    onClick={() => playAtTime(i.entryTimeSeconds)}
+                    className="mt-2 bg-green-600 text-white px-2 py-1 w-full"
+                  >
+                    ▶ Play
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
         )}
-
       </div>
 
       {/* IMAGE MODAL */}
@@ -273,7 +285,6 @@ pdf.text(`Duration: ${i.durationSeconds?.toFixed(2)}s`, 20, y); y += 8
           <img src={selectedImage} className="max-h-[90%] max-w-[90%]" />
         </div>
       )}
-
     </div>
   )
 }
