@@ -1,4 +1,4 @@
-export const API_BASE = "http://localhost:8080/api"
+export const API_BASE =  `${process.env.NEXT_PUBLIC_API_URL}/api`;
 
 export async function startMonitoring(videoId: number, mode: string) {
   const res = await fetch(
