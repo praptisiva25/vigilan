@@ -124,7 +124,7 @@ export default function Dashboard() {
       {/* Upload Section */}
       <div className="bg-white p-6 rounded-xl shadow mb-8">
         <h2 className="text-lg font-semibold mb-4">
-          Upload Video & Set Camera Location
+          Upload Video & Set Camera location
         </h2>
 
         <label className="flex items-center justify-between border-2 border-dashed border-gray-300 rounded-lg p-4 mb-3 cursor-pointer hover:border-blue-500 transition">
